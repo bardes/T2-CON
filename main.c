@@ -1,14 +1,15 @@
-#include "pgm.h"
 #include <string.h>
+
+#include "pxm.h"
+#include "blur.h"
 
 int main(int argc, char *argv[])
 {
-    char buff[256];
-    PXM_Image *i = PXM_Load_image_section(argv[1], 5, 1);
-    memset(i->pixels, 0x88, i->bpp * i->w * i->len);
-    strcpy(buff, argv[1]);
-    strcat(buff, ".new");
-    PXM_write_image_section(buff, i);
+    char name[256] = "blur-";
+    PXM_Image *i = PXM_load_image(argv[1]);
+    strcat(name, argv[1]);
+    PXM_blur(i, 2);
+    PXM_write_image(name, i);
     PXM_free_image(i);
     return 0;
 }

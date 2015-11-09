@@ -9,7 +9,7 @@ WARNINGS = -pedantic -Wall -Wextra -Wcast-align -Wcast-qual \
 	   -Wmissing-include-dirs -Wredundant-decls -Wshadow -Wsign-conversion \
 	   -Wstrict-overflow=5 -Wswitch-default -Wundef -Wno-unused
 
-CFLAGS = $(WARNINGS) -std=c11 -march=native -pthread -fopenmp 
+CFLAGS = $(WARNINGS) -std=c11 -march=native -pthread -fopenmp -Ofast
 
 CPPFLAGS = -Wl,-rpath -Wl,/usr/lib/openmpi -Wl,--enable-new-dtags -L/usr/lib/openmpi -lmpi
 

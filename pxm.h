@@ -1,5 +1,5 @@
-#ifndef __PGM_H__
-#define __PGM_H__
+#ifndef __PXM_H__
+#define __PXM_H__
 
 #include <stdint.h>
 #include <stdio.h>
@@ -24,6 +24,7 @@ typedef struct {
  * Returns 0 on success.
  */
 int PXM_read_header(FILE *f, PXM_Image* dest);
+
 
 /**
  * Loads an image file based on it's extension. Or null if failed.
@@ -51,4 +52,4 @@ int PXM_write_image_section(const char *path, const PXM_Image *i);
  */
 void PXM_free_image(PXM_Image *img);
 
-#endif //__PGM_H__
+#endif //__PXM_H__

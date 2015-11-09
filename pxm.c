@@ -1,4 +1,4 @@
-#include "pgm.h"
+#include "pxm.h"
 
 #include "utils.h"
 
@@ -95,7 +95,7 @@ int PXM_read_header(FILE *f, PXM_Image* dest)
     FAIL(line, -1);
     FAIL_MSG(sscanf(line, "%zu", &(dest->max)) == 1, -1,
         "Failed to read maximum cannel value!");
-    FAIL_MSG(dest->max <= 0xffff, NULL,
+    FAIL_MSG(dest->max <= 0xffff, 0,
              "Maximum channel value too big (%zu) must be at most 65535.",
              dest->max);
     DMSG("Maximum channel value is: %zu.", dest->max);
