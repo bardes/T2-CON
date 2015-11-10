@@ -9,11 +9,11 @@ WARNINGS = -pedantic -Wall -Wextra -Wcast-align -Wcast-qual \
 	   -Wmissing-include-dirs -Wredundant-decls -Wshadow -Wsign-conversion \
 	   -Wstrict-overflow=5 -Wswitch-default -Wundef -Wno-unused
 
-CFLAGS = $(WARNINGS) -std=c11 -march=native -pthread -fopenmp -Ofast
+CFLAGS = $(WARNINGS) -std=c11 -march=native -Ofast -fopenmp 
 
-CPPFLAGS = -Wl,-rpath -Wl,/usr/lib/openmpi -Wl,--enable-new-dtags -L/usr/lib/openmpi -lmpi
+CPPFLAGS = -D_POSIX_SOURCE
 
-LDFLAGS = -lgsl -lgslcblas -lm -lpthread
+LDFLAGS = -lrt
 
 SRCS = $(shell find -name '*.c')
 HDRS = $(shell find -name '*.h')
@@ -33,7 +33,7 @@ debug: all
 
 #Linka e gera o executavel
 $(EXEC): $(DEPS) $(OBJS)
-	$(CC) $(CFALGS) -o $(EXEC) $(OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(EXEC) $(OBJS) $(LDFLAGS)
 
 #Compila cada arquivo
 %.o:

@@ -1,11 +1,13 @@
 #include "blur.h"
 
+#include <aio.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
 
 #include "utils.h"
 
-#define PXM_WINDOW_SIZE (5000)
+#define PXM_WINDOW_SIZE (1000)
 #define MIN(x, y) (x < y ? x : y)
 #define MAX(x, y) (x > y ? x : y)
 
@@ -55,6 +57,7 @@ static void y_blur_line_grey(float *src, uint8_t *dest, float *line_buffer,
 static void x_blur_block_grey(PXM_Image *img, float *block,
         size_t line_offset, size_t block_height, size_t radius)
 {
+    #pragma omp parallel for schedule(static)
     for (size_t line = 0; line < block_height; ++line) {
         x_blur_line_grey(((uint8_t*)img->pixels) +
                 (line + line_offset) * img->w,
@@ -67,16 +70,20 @@ static void x_blur_block_grey(PXM_Image *img, float *block,
 static void y_blur_block_grey(PXM_Image *img, float *block,
         size_t line_offset, size_t block_height, size_t radius)
 {
-    float *line_buffer = (float*) malloc(img->w * sizeof(float));
+    #pragma omp parallel
+    {
+        float *line_buffer = (float*) malloc(img->w * sizeof(float));
 
-    for (size_t line = 0; line < block_height; ++line) {
-        y_blur_line_grey(block + line * img->w,
-                ((uint8_t*)img->pixels) + (line + line_offset) * img->w,
-                line_buffer, img->w, MIN(line + line_offset, radius),
-                MIN(img->len - line_offset - line - 1, radius));
+        #pragma omp for schedule(static)
+        for (size_t line = 0; line < block_height; ++line) {
+            y_blur_line_grey(block + line * img->w,
+                    ((uint8_t*)img->pixels) + (line + line_offset) * img->w,
+                    line_buffer, img->w, MIN(line + line_offset, radius),
+                    MIN(img->len - line_offset - line - 1, radius));
+        }
+
+        free(line_buffer);
     }
-
-    free(line_buffer);
 }
 
 void PXM_blur(PXM_Image *img, size_t radius)
@@ -86,22 +93,26 @@ void PXM_blur(PXM_Image *img, size_t radius)
     FAIL_MSG(img->max < 256,, "16 bit blur not implemented!");
     FAIL_MSG(img->type == PXM_GRAYSACALE,, "No color blur yet!");
 
-
     float *buffer = (float*) malloc(img->w * PXM_WINDOW_SIZE * sizeof(float));
     FAIL(buffer,);
 
     size_t lines_to_process = img->len;
-    size_t first_block = MIN(PXM_WINDOW_SIZE, lines_to_process);
-    DMSG("Blurring the first block from line 0 to %zu...", first_block - radius);
-    
-    x_blur_block_grey(img, buffer, 0, first_block, radius);
-    y_blur_block_grey(img, buffer, 0, first_block - radius, radius);
-    size_t current_line = first_block - radius;
-    lines_to_process -= first_block - radius;
+    if (lines_to_process <= PXM_WINDOW_SIZE) {
+        DMSG("Wholw image fits into window size. Blurring in a single step...");
+        x_blur_block_grey(img, buffer, 0, lines_to_process, radius);
+        y_blur_block_grey(img, buffer, 0, lines_to_process, radius);
+        DMSG("Done.");
+        return;
+    } else {
+        DMSG("Image won't fit into window size. Blurring in pieces.");
+        DMSG("Starting to process from line 0 to %zu...", PXM_WINDOW_SIZE - radius);
+        x_blur_block_grey(img, buffer, 0, PXM_WINDOW_SIZE, radius);
+        y_blur_block_grey(img, buffer, 0, PXM_WINDOW_SIZE - radius, radius);
+        DMSG("Done.");
+    }
 
-    DMSG("Done.");
-    DMSG("%zu lines remaining to blur, %zu at a time.",
-            lines_to_process, PXM_WINDOW_SIZE - 2 * radius);
+    size_t current_line = PXM_WINDOW_SIZE - radius;
+    lines_to_process -= current_line;
 
     while(lines_to_process > PXM_WINDOW_SIZE) {
         size_t finished_lines = (PXM_WINDOW_SIZE - 2 * radius);
@@ -110,17 +121,20 @@ void PXM_blur(PXM_Image *img, size_t radius)
 
         x_blur_block_grey(img, buffer, current_line - radius, PXM_WINDOW_SIZE, radius);
         y_blur_block_grey(img, buffer + radius * img->w, current_line, finished_lines, radius);
-        
+
         lines_to_process -= finished_lines;
         current_line += finished_lines;
         DMSG("Done.");
     }
 
-    DMSG("Finishing to process remaining lines, from %zu to %zu...",
-            current_line, current_line + lines_to_process);
+    if (lines_to_process) {
+        DMSG("Finishing to process remaining lines, from %zu to %zu...",
+                current_line, current_line + lines_to_process);
 
-    x_blur_block_grey(img, buffer, current_line - radius, lines_to_process + radius, radius);
-    y_blur_block_grey(img, buffer + radius * img->w, current_line, lines_to_process, radius);
+        x_blur_block_grey(img, buffer, current_line - radius, lines_to_process + radius, radius);
+        y_blur_block_grey(img, buffer + radius * img->w, current_line, lines_to_process, radius);
+        DMSG("Done.");
+    }
 
     DMSG("Finished blurring image.");
     free(buffer);

@@ -3,6 +3,7 @@
 #include "utils.h"
 
 #include <ctype.h>
+#include <fcntl.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -100,6 +101,8 @@ int PXM_read_header(FILE *f, PXM_Image* dest)
              dest->max);
     DMSG("Maximum channel value is: %zu.", dest->max);
 
+    dest->data_start = (size_t) ftell(f);
+
     DMSG("Done reading header.");
     return 0;
 }
@@ -131,12 +134,7 @@ int PXM_write_image_section(const char* path, const PXM_Image* i)
     FILE *f = fopen(path, "r+");
     FAIL(f, -1);
 
-    /* Skips the header */
-    next_line(f);
-    next_line(f);
-    next_line(f);
-
-    fseek(f, (int)(i->offset * i->w * i->bpp), SEEK_CUR);
+    fseek(f, (int)(i->offset * i->w * i->bpp + i->data_start), SEEK_CUR);
     fwrite(i->pixels, i->bpp, i->len * i->w, f);
 
     fclose(f);

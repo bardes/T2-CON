@@ -15,6 +15,7 @@ typedef struct {
     size_t offset, len;     /* Used to load only part of the data */
     size_t max;             /* Maximum channel value (usually 255) */
     size_t bpp;             /* Bytes per pixel */
+    size_t data_start;      /* Offset of the first byte of the data */
     PXM_ImgType type;       /* Image type (grayscale/color)*/
 } PXM_Image;
 
