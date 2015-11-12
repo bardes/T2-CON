@@ -5,7 +5,7 @@
 #include <stdio.h>
 
 typedef enum {
-    PXM_GRAYSACALE,
+    PXM_GREYSACALE,
     PXM_COLOR
 } PXM_ImgType;
 

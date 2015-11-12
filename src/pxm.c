@@ -76,7 +76,7 @@ int PXM_read_header(FILE *f, PXM_Image* dest)
 
     if(!strcmp(line, "P5")) {
         DMSG("PGM file header detected.");
-        dest->type = PXM_GRAYSACALE;
+        dest->type = PXM_GREYSACALE;
     } else if(!strcmp(line, "P6")) {
         DMSG("PPM file header detected.");
         dest->type = PXM_COLOR;
@@ -85,6 +85,7 @@ int PXM_read_header(FILE *f, PXM_Image* dest)
     }
 
     /* Reads the dimensions */
+    free(line);
     line = next_line(f);
     FAIL(line, -1);
     FAIL_MSG(sscanf(line, "%zu %zu", &(dest->w), &(dest->h)) == 2, -1,
@@ -92,6 +93,7 @@ int PXM_read_header(FILE *f, PXM_Image* dest)
     DMSG("Image dimensions are: %zux%zu.", dest->w, dest->h);
 
     /* Reads the maximum channel value */
+    free(line);
     line = next_line(f);
     FAIL(line, -1);
     FAIL_MSG(sscanf(line, "%zu", &(dest->max)) == 1, -1,
@@ -104,6 +106,7 @@ int PXM_read_header(FILE *f, PXM_Image* dest)
     dest->data_start = (size_t) ftell(f);
 
     DMSG("Done reading header.");
+    free(line);
     return 0;
 }
 
