@@ -6,7 +6,4 @@
 *.bak
 *.dep
 *.swp
-T2
-jacobi
-pgm/
-blur-pgm/
+imgs/
