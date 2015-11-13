@@ -14,10 +14,10 @@ do
         truncate -s0 .tmp_results
         for ((_itr=0;_itr<$TESTS;_itr++))
         do
-            OMP_NUM_THREADS=$N_THREADS /usr/bin/time -f '%e' $PROGRAM $FILE /dev/null 2>>.tmp_results;
+            OMP_NUM_THREADS=$N_THREADS /usr/bin/time -f '%e' $PROGRAM $FILE /dev/null 2 2>>.tmp_results;
             echo -n '#'
         done;
-        echo
+        echo -e "\t[DONE]"
         echo -ne "$FILE\t$N_THREADS\t" >> results
 
         #Some awkfu to average out the results and get the deviation

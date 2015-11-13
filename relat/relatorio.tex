@@ -1,0 +1,400 @@
+\documentclass[11pt,towside]{article}
+\usepackage[brazilian]{babel}			% Ajusta a língua para Portugês Brasileiro
+\usepackage{amsmath}					% Permite escrever fórmulas matemáticas
+\usepackage[utf8]{inputenc}			% Lê o arquivo fonte codificado em UTF-8
+\usepackage[T1]{fontenc}				% Codifica os tipos no arquivo de saída usando T1
+\usepackage[a4paper]{geometry}			% Ajusta o tamanho do papel para A4
+\usepackage{titling}					% Permite fazer ajustes no título do artigo
+\usepackage{fancyhdr}					% Permite ajustar cabeçalhos e rodapés
+\usepackage{indentfirst}				% Ajusta a indentação do primeiro parágrafo
+\usepackage[binary-units=true, per-mode=symbol]{siunitx}
+\usepackage{pgfplotstable}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage[section]{placeins}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{imakeidx}
+\makeindex[columns=3, title=Alphabetical Index, intoc]
+\pgfplotsset{width=15cm,compat=1.12}
+
+\DeclareSIUnit\px{px}
+
+\lstset{
+  backgroundcolor=\color{white},
+  basicstyle=\footnotesize,
+  breakatwhitespace=true,
+  breaklines=true,
+  captionpos=b,
+  commentstyle=\color{gray},
+  extendedchars=true,
+  frame=single,
+  keepspaces=true,
+  keywordstyle=\color{blue},
+  otherkeywords={},
+  numbers=left,
+  numbersep=6pt,
+  numberstyle=\tiny\color{gray},
+  rulecolor=\color{black},
+  showspaces=false,
+  showstringspaces=false,
+  stringstyle=\color{orange},
+  tabsize=4,
+  title=\lstname,
+  language=c
+}
+
+\graphicspath{{img/}}
+
+%% Define estilo das tabelas %%
+\pgfplotstableset {
+	every head row/.style={before row=\toprule,after row=\midrule},
+    every last row/.style={after row=\bottomrule}
+}
+            
+%% Inicio do documento %%
+\begin{document}
+
+%% Título do artigo %%
+\begin{titlepage}
+\begin{center}
+
+\textsc{\Huge Universidade de São Paulo}\\[5mm]
+\textsc{\Large Análise de Desempenho Concorrente Para Aplicação de Filtro Smooth em Imagens de Larga Escala}
+
+\vfill
+{\Huge SSC0143 -- Programação Concorrente}
+\vfill
+
+\begin{tabular}{rl}
+\emph{Professor:}& {\Large Júlio Cezar Estrella} \\[5mm]
+\emph{Alunos:}& {\Large Luz Padilla} \\[2mm]
+& {\Large Paulo B. N. Nascimento}
+\end{tabular}\\[25mm]
+
+\end{center}
+\end{titlepage}
+
+\tableofcontents
+\vspace{1cm}
+\hrule
+\vspace{1cm}
+
+%% Inicio do artigo %%
+\section{Introdução}
+O filtro smooth é uma técnica de processamento de imagem muito útil para o processamento de imagens, especialmente no caso de aplicações de larga escala. Justamente por sua simplicidade computacional esse filtro é um bom candidato para ser usado como primeira etapa de preprocessamento, com o objetivo de eliminar ruídos de alta frequência.
+
+
+\section{Algoritimo}
+O algoritimo para calcular o valor de cada pixel é, à primeira vista, bastante simples: cada pixel recebe a média arimética dos pixels à sua volta, porém quando o pixel em questão está próximo da borda da imagem não há pixels o suficiente à sua volta. Nesse caso a borda deve ser entendida usando-se pixels da mesma cor.
+
+Visando melhorar o desempenho e maximizar acessos sequencias à memória, ao invés de aplicar o filtro à cada pixel em todas as direções, o algoritimo foi dividido em duas etapas. Primeiro calculando a média na direção \emph{x}, e depois na direção \emph{y}.
+
+Além de otimizar os acessos sequenciais à memória, esse método também reduz a quantidade total de operações necessárias, já que os resultados parciais são preservados e reutilizados, fazendo assim uma troca de espaço de memória por tempo de CPU.
+
+Por fim, como a imagem pode em alguns casos ser grande de mais para ser processada de uma vez só na memória principal, existe um limite máximo de linhas que são processadas de cada vez, desse modo apenas parte da imagem precisa ser processada a cada passagem.
+
+\break
+\section{Análise do Código (github.com/bardes/T2-CON)}
+O formato de imagem \emph{Netpbm}\cite{netpbm} foi escolhido para representar as imagens devido a sua simplicidade e praticidade. Uma vez que as imagens precisam ser trabalhadas em seu completo, não há benefícios em comprimi-las e descomprimi-las, sacrificando performance e tempo de CPU.
+
+Após alguns testes (ver seção \ref{sec:res}) notou-se que o desempenho de \emph{I/O} era de grande influência no desempenho geral da aplicação, e que devido à limitações de largura de banda do sistema de arquivos, a melhor alternativa seria executar o programa à partir de apenas um nó.
+
+\begin{lstlisting}
+int main(int argc, char *argv[])
+{
+    PXM_Image *i = PXM_load_image(argv[1]);
+
+    PXM_blur(i, (size_t) atoi(argv[3]));
+    PXM_write_image(argv[2], i);
+
+    PXM_free_image(i);
+    return 0;
+}
+\end{lstlisting}
+
+
+O código da \texttt{main()} é extremamente simples: a imagem é carregada, processada pelo filtro, e escrita de volta. A seguir veremos mais sobre o filtro.
+
+\begin{lstlisting}
+void PXM_blur(PXM_Image *img, size_t radius)
+{   
+    DMSG("Bluring %zux%zu image with a window radius of %zu pixels.",
+            img->w, img->h, radius);
+    FAIL_MSG(img->max < 256,, "16 bit blur not implemented!");
+    if(img->type == PXM_GREYSACALE)
+        blur_grey(img, radius);
+    else
+        blur_color(img, radius);
+}
+\end{lstlisting}
+
+Aqui vemos que a função \texttt{PXM\_blur()} simplesmente verifica o tipo da imagem, e chama o código apropriado. Para fim de simplicidade somente o código para imagens preto e brancas sera listado, já que a versão colorida é análoga a aplicar a versão preto e branca em cada canal de cor.
+
+\break
+\begin{lstlisting}
+static void blur_grey(PXM_Image *img, size_t radius)
+{
+	// Os parametros foram omitidos para facilitar a leitura do codigo
+	float *buffer = (float*) malloc(img->w*PXM_WINDOW_SIZE*sizeof(float));
+
+    size_t lines_to_process = img->len;
+    if (lines_to_process <= PXM_WINDOW_SIZE) {
+        x_blur_block_grey(...);
+        y_blur_block_grey(...);
+        free(buffer);
+        return;
+    } else {
+        x_blur_block_grey(...);
+        y_blur_block_grey(...);
+    }
+
+    size_t current_line = PXM_WINDOW_SIZE - radius;
+    lines_to_process -= current_line;
+
+    while(lines_to_process > PXM_WINDOW_SIZE) {
+        size_t finished_lines = (PXM_WINDOW_SIZE - 2 * radius);
+        x_blur_block_grey(...);
+        y_blur_block_grey(...);
+
+        lines_to_process -= finished_lines;
+        current_line += finished_lines;
+    }
+
+    if (lines_to_process) {
+        x_blur_block_grey(...);
+        y_blur_block_grey(...);
+    }
+    
+    free(buffer);
+}
+\end{lstlisting}
+
+Aqui vemos que a função primeiro aloca um buffer para conter a janela de processamento. Em seguida ela verifica se é possível filtrar a imagem toda de uma vez. Caso não seja, o laço \emph{while} reaplica o filtro (avançando a janela cada vez) até chegar no fim da imagem, onde novamente é feita uma verificação para aplicar o filtro em quaisquer linhas restantes ao final.
+
+\break
+
+\begin{lstlisting}
+static void x_blur_block_grey(PXM_Image *img, float *block,
+        size_t line_offset, size_t block_height, size_t radius)
+{
+    #pragma omp parallel for schedule(static)
+    for (size_t line = 0; line < block_height; ++line) {
+        x_blur_line_grey(((uint8_t*)img->pixels) +
+                (line + line_offset) * img->w * img->bpp,
+                block + line * img->w, img->w, radius);
+    }
+}
+
+static void y_blur_block_grey(PXM_Image *img, float *block,
+        size_t line_offset, size_t block_height, size_t radius)
+{
+    #pragma omp parallel
+    {
+        float *line_buffer = (float*) malloc(img->w * sizeof(float));
+
+        #pragma omp for schedule(static)
+        for (size_t line = 0; line < block_height; ++line) {
+            y_blur_line_grey(block + line * img->w,
+                    (img->pixels) + (line + line_offset) * img->w,
+                    line_buffer, img->w, MIN(line + line_offset, radius),
+                    MIN(img->len - line_offset - line - 1, radius));
+        }
+
+        free(line_buffer);
+    }
+}
+\end{lstlisting}
+
+As funções responsáveis por atuar sobre os blocos foram escolhias como ponto de paralelização, já que cada linha pode ser calculada independentemente e através das diretivas de compilação providas pelo padrão \emph{OpenMP} é trivial paralelizar uma sequencia de processamentos independentes.
+
+\break
+\section{Resultados}
+\label{sec:res}
+Os testes foram executados no cluster \emph{Cosmos}, com CPUs \emph{Intel Core 2 Quad Q9400 2.66GHz}. Testes de desempenho de entrada e saída indicam que a largura de banda do sistema de arquivos (NFS) é de aproximadamente \SI{80}{\mebi\byte\per\second}. A seguir estão os resultados dos tempos de execução.
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    title={Tempo de Execução para Imagens em Escala de Cinza},
+    xlabel={Número de threads},
+    ylabel={Tempo [\si{\s}]},
+    legend pos=north east,
+    ymajorgrids=true,
+    xtick=data,
+    grid style=dashed,
+]
+
+\addplot[very thick,
+    color=green,
+    mark=*,
+    mark options={fill=white},
+    nodes near coords,
+    error bars,
+    y dir=both,
+    y explicit
+    ]
+    coordinates {
+		(1,25.928800) +- (0,4.73418)
+		(2,15.251600) +- (0,2.71838)
+		(3,8.786000) +- (0,0.650876)
+		(4,6.920800) +- (0,0.0433516)
+    };
+
+\addplot[very thick,
+    color=red,
+    mark=*,
+    mark options={fill=white},
+    nodes near coords,
+    error bars,
+    y dir=both,
+    y explicit
+    ]
+    coordinates {
+		(1,13.072000) +- (0,2.47951)
+		(2,7.106000) +- (0,1.30609)
+		(3,4.520400) +- (0,0.481194)
+		(4,3.605600) +- (0,0.349915)
+    };
+ 
+\addplot[very thick,
+    color=blue,
+    mark=*,
+    mark options={fill=white},
+    nodes near coords,
+    error bars,
+    y dir=both,
+    y explicit
+    ]
+    coordinates {
+		(1,5.777600) +- (0,0.0628191)
+		(2,3.773600) +- (0,0.641267)
+		(3,2.499600) +- (0,0.415745)
+		(4,1.769600) +- (0,0.0542203)
+    };
+
+\addplot[very thick,
+    color=orange,
+    mark=*,
+    mark options={fill=white},
+    nodes near coords,
+    error bars,
+    y dir=both,
+    y explicit
+    ]
+    coordinates {
+		(1,3.146400) +- (0,0.488032)
+		(2,1.900400) +- (0,0.310606)
+		(3,1.166800) +- (0,0.160592)
+		(4,0.913600) +- (0,0.0249608)
+    };
+    
+\legend{32000x48000, 32000x24000, 16000x24000, 8000x24000}
+ 
+\end{axis}
+\end{tikzpicture}
+\end{center}
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[
+    title={Tempo de Execução para Imagens Coloridas},
+    xlabel={Número de threads},
+    ylabel={Tempo [\si{\s}]},
+    legend pos=north east,
+    ymajorgrids=true,
+    xtick=data,
+    grid style=dashed,
+]
+
+\addplot[very thick,
+    color=green,
+    mark=*,
+    mark options={fill=white},
+    nodes near coords,
+    error bars,
+    y dir=both,
+    y explicit
+    ]
+    coordinates {
+		(1,13.757600) +- (0,2.69502)
+		(2,7.858000) +- (0,1.35373)
+		(3,5.929200) +- (0,0.741841)
+		(4,4.401200) +- (0,0.259281)
+    };
+
+\addplot[very thick,
+    color=red,
+    mark=*,
+    mark options={fill=white},
+    nodes near coords,
+    error bars,
+    y dir=both,
+    y explicit
+    ]
+    coordinates {
+		(1,7.026000) +- (0,1.45535)
+		(2,4.129600) +- (0,0.73859)
+		(3,2.875200) +- (0,0.307586)
+		(4,2.203600) +- (0,0.0313535)
+    };
+ 
+\addplot[very thick,
+    color=blue,
+    mark=*,
+    mark options={fill=white},
+    nodes near coords,
+    error bars,
+    y dir=both,
+    y explicit
+    ]
+    coordinates {
+		(1,3.509600) +- (0,0.713737)
+		(2,1.996000) +- (0,0.329812)
+		(3,1.383200) +- (0,0.134929)
+		(4,1.104000) +- (0,0.0183303)
+    };
+
+\addplot[very thick,
+    color=orange,
+    mark=*,
+    mark options={fill=white},
+    nodes near coords,
+    error bars,
+    y dir=both,
+    y explicit
+    ]
+    coordinates {
+		(1,1.708400) +- (0,0.186348)
+		(2,1.048000) +- (0,0.169186)
+		(3,0.724400) +- (0,0.0789977)
+		(4,0.581200) +- (0,0.0172789)
+    };
+    
+\legend{16000x20000, 16000x10000, 8000x10000, 8000x5000}
+ 
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+Aqui podemos ver o resultado médio de 15 execuções de cada imagem com diferentes números de threads. Conforme o esperado a adição de threads contribuiu para \emph{speedups} de (em geral) 60 a 70\% por thread adicionada.
+
+É possível notar também que os testes com tempo de duração mais longos têm um desvio padrão maior em relação aos outros. Isso pode ser explicado pelo fato de que testes mais longos estão sujeitos a maiores variações do sistema operacional, em particular o escalonador e a carga do sistema podem influenciar significativamente os tempos de execução. Ainda assim os resultados são bastante consistentes e confiáveis.
+
+\break
+\section{Conclusão}
+O algoritmo de \emph{smooth} se beneficiou bastante da implementação paralela, chegando em alguns casos a \emph{speedups} de 312\%, porém com esse ganho de desempenho o gargalo do algoritimo rapidamente se torna a entrada e saída, e não a CPU. De fato com apenas uma \emph{thread} o algoritimo já atinge velocidades de \SI{60}{\mebi\byte\per\s} (75\% do limite do sistema de arquivos). Com 4 \emph{threads} a capacidade de processamento chega a \SI{218}{\mebi\byte\per\s}, mais do que o triplo do limite de entrada e saída.
+
+Sendo assim, a solução ideal para se obter ganhos ainda melhores seria investigar maneiras de se otimizar a leitura e escrita dos dados, usando-se combinações de técnicas de entrada e saída assíncrona, \emph{RAID}, e caches.
+
+%% Bibliografia %%
+\begin{thebibliography}{5}
+\bibitem{ref1}
+By Steven W. Smith
+\\\textit{The Scientist and Engineer's Guide to Digital Signal Processing}\\ISBN-13: 978-0966017632
+ 
+\bibitem{netpbm} 
+Netpbm
+\\\texttt{http://netpbm.sourceforge.net/doc/}
+\end{thebibliography}
+
+\end{document}
